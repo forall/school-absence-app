@@ -111,5 +111,5 @@ Jeśli masz problemy z aplikacją, możesz:
 ---
 
 **Wersja:** 1.0.0  
-**Ostatnia aktualizacja:** $(date +'%d.%m.%Y')  
+**Ostatnia aktualizacja:** 27.09.2025  
 **Licencja:** MIT
