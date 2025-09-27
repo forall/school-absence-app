@@ -1,238 +1,229 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'db_helper.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'database_helper.dart';
 
 class SummaryPage extends StatefulWidget {
-  final List<DateTime> absences;
-
-  SummaryPage({required this.absences});
+  const SummaryPage({super.key});
 
   @override
-  _SummaryPageState createState() => _SummaryPageState();
+  State<SummaryPage> createState() => _SummaryPageState();
 }
 
 class _SummaryPageState extends State<SummaryPage> {
-  final dbHelper = DatabaseHelper();
-  List<DateTime> _allAbsences = [];
+  List<Map<String, dynamic>> _monthlyAbsences = [];
+  int _selectedYear = DateTime.now().year;
+  int _selectedMonth = DateTime.now().month;
 
   @override
   void initState() {
     super.initState();
-    _loadAllData();
+    _loadMonthlyAbsences();
   }
 
-  Future<void> _loadAllData() async {
-    final absences = await dbHelper.getAbsences();
+  Future<void> _loadMonthlyAbsences() async {
+    final absences = await DatabaseHelper.instance.getAbsencesForMonth(_selectedYear, _selectedMonth);
     setState(() {
-      _allAbsences = absences;
+      _monthlyAbsences = absences;
     });
   }
 
-  Map<String, List<DateTime>> _groupAbsencesByMonth() {
-    Map<String, List<DateTime>> grouped = {};
-
-    for (DateTime absence in _allAbsences) {
-      String monthName = _getMonthName(absence.month);
-      String displayKey = '\$monthName \${absence.year}';
-
-      if (!grouped.containsKey(displayKey)) {
-        grouped[displayKey] = [];
+  Future<void> _sendMonthlySummary() async {
+    final settings = await DatabaseHelper.instance.getSettings();
+    if (settings.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please set up child name and school email first')),
+        );
       }
-      grouped[displayKey]!.add(absence);
+      return;
     }
 
-    // Sortuj daty w każdym miesiącu
-    grouped.forEach((key, dates) {
-      dates.sort((a, b) => b.compareTo(a)); // Od najnowszych
-    });
+    final childName = settings['child_name'] as String;
+    final schoolEmail = settings['school_email'] as String;
+    final monthName = DateFormat('MMMM yyyy').format(DateTime(_selectedYear, _selectedMonth));
 
-    return grouped;
-  }
+    String body = 'Dear School,\n\nHere is the monthly absence summary for \$childName in \$monthName:\n\n';
 
-  String _getMonthName(int month) {
-    const months = [
-      '', 'Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec',
-      'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'
-    ];
-    return months[month];
-  }
-
-  String _getDayName(int weekday) {
-    const days = [
-      '', 'Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota', 'Niedziela'
-    ];
-    return days[weekday];
-  }
-
-  Future<void> _deleteAbsence(DateTime date) async {
-    final success = await dbHelper.deleteAbsence(date);
-    if (success) {
-      await _loadAllData();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Usunięto nieobecność z \${DateFormat('dd.MM.yyyy').format(date)}'),
-          backgroundColor: Colors.green,
-        ),
-      );
+    if (_monthlyAbsences.isEmpty) {
+      body += 'No absences recorded for this month.\n';
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Błąd podczas usuwania nieobecności'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      body += 'Absence dates:\n';
+      for (var absence in _monthlyAbsences) {
+        final date = DateTime.parse(absence['date'] as String);
+        final formattedDate = DateFormat('EEEE, dd/MM/yyyy').format(date);
+        body += '• \$formattedDate\n';
+      }
+      body += '\nTotal absences: \${_monthlyAbsences.length}\n';
+    }
+
+    body += '\nBest regards';
+
+    final subject = 'Monthly Absence Summary - \$childName - \$monthName';
+
+    final Uri emailUri = Uri(
+      scheme: 'mailto',
+      path: schoolEmail,
+      query: 'subject=\${Uri.encodeComponent(subject)}&body=\${Uri.encodeComponent(body)}',
+    );
+
+    if (await canLaunchUrl(emailUri)) {
+      await launchUrl(emailUri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open email app')),
+        );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final groupedAbsences = _groupAbsencesByMonth();
-    final now = DateTime.now();
-    final currentMonthKey = '\${_getMonthName(now.month)} \${now.year}';
-    final currentMonthCount = groupedAbsences[currentMonthKey]?.length ?? 0;
-    final totalCount = _allAbsences.length;
-
     return Scaffold(
       appBar: AppBar(
-        title: Text("Podsumowanie nieobecności"),
+        title: const Text('Monthly Summary'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.email),
+            onPressed: _sendMonthlySummary,
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // Statystyki
+          // Month/Year Selector
           Container(
-            width: double.infinity,
-            margin: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
             child: Row(
               children: [
                 Expanded(
-                  child: Card(
-                    color: Colors.blue.shade50,
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Text(
-                            '\$totalCount',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue,
-                            ),
-                          ),
-                          Text(
-                            'Łącznie',
-                            style: TextStyle(color: Colors.blue.shade700),
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: DropdownButton<int>(
+                    value: _selectedMonth,
+                    isExpanded: true,
+                    items: List.generate(12, (index) {
+                      final month = index + 1;
+                      return DropdownMenuItem(
+                        value: month,
+                        child: Text(DateFormat('MMMM').format(DateTime(2023, month))),
+                      );
+                    }),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _selectedMonth = value;
+                        });
+                        _loadMonthlyAbsences();
+                      }
+                    },
                   ),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 16),
                 Expanded(
-                  child: Card(
-                    color: Colors.green.shade50,
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Text(
-                            '\$currentMonthCount',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                            ),
-                          ),
-                          Text(
-                            'Ten miesiąc',
-                            style: TextStyle(color: Colors.green.shade700),
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: DropdownButton<int>(
+                    value: _selectedYear,
+                    isExpanded: true,
+                    items: List.generate(5, (index) {
+                      final year = DateTime.now().year - 2 + index;
+                      return DropdownMenuItem(
+                        value: year,
+                        child: Text(year.toString()),
+                      );
+                    }),
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _selectedYear = value;
+                        });
+                        _loadMonthlyAbsences();
+                      }
+                    },
                   ),
                 ),
               ],
             ),
           ),
-
-          // Lista nieobecności
+          const Divider(),
+          // Summary Stats
+          Container(
+            padding: const EdgeInsets.all(16),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Text(
+                      'Absences in \${DateFormat('MMMM yyyy').format(DateTime(_selectedYear, _selectedMonth))}',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '\${_monthlyAbsences.length}',
+                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        color: _monthlyAbsences.isEmpty ? Colors.green : Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _monthlyAbsences.length == 1 ? 'day' : 'days',
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Absence List
           Expanded(
-            child: _allAbsences.isEmpty
-                ? Center(
+            child: _monthlyAbsences.isEmpty
+                ? const Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.calendar_today, size: 64, color: Colors.grey),
+                        Icon(Icons.check_circle, size: 64, color: Colors.green),
                         SizedBox(height: 16),
-                        Text(
-                          'Brak nieobecności',
-                          style: TextStyle(fontSize: 18, color: Colors.grey),
-                        ),
+                        Text('No absences this month!', style: TextStyle(fontSize: 18)),
                       ],
                     ),
                   )
                 : ListView.builder(
-                    itemCount: groupedAbsences.keys.length,
+                    itemCount: _monthlyAbsences.length,
                     itemBuilder: (context, index) {
-                      String monthKey = groupedAbsences.keys.elementAt(index);
-                      List<DateTime> monthAbsences = groupedAbsences[monthKey]!;
+                      final absence = _monthlyAbsences[index];
+                      final date = DateTime.parse(absence['date'] as String);
+                      final formattedDate = DateFormat('EEEE, dd/MM/yyyy').format(date);
 
-                      return Card(
-                        margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        child: ExpansionTile(
-                          title: Text(
-                            monthKey,
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text('Nieobecności: \${monthAbsences.length}'),
-                          children: monthAbsences.map((date) {
-                            return ListTile(
-                              leading: Icon(Icons.event_busy, color: Colors.red),
-                              title: Text(
-                                DateFormat('dd.MM.yyyy').format(date),
-                                style: TextStyle(fontWeight: FontWeight.w500),
-                              ),
-                              subtitle: Text(_getDayName(date.weekday)),
-                              trailing: IconButton(
-                                icon: Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _showDeleteDialog(date),
-                              ),
-                            );
-                          }).toList(),
+                      return ListTile(
+                        leading: const Icon(Icons.event_busy, color: Colors.red),
+                        title: Text(formattedDate),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () async {
+                            await DatabaseHelper.instance.removeAbsence(date);
+                            _loadMonthlyAbsences();
+                          },
                         ),
                       );
                     },
                   ),
           ),
+          // Send Summary Button
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            child: ElevatedButton.icon(
+              onPressed: _sendMonthlySummary,
+              icon: const Icon(Icons.email),
+              label: const Text('Send Monthly Summary'),
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.all(16),
+                textStyle: const TextStyle(fontSize: 16),
+              ),
+            ),
+          ),
         ],
       ),
-    );
-  }
-
-  void _showDeleteDialog(DateTime date) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Usuń nieobecność'),
-          content: Text('Czy na pewno chcesz usunąć nieobecność z dnia \${DateFormat('dd.MM.yyyy').format(date)}?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text('Anuluj'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _deleteAbsence(date);
-              },
-              child: Text('Usuń', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
     );
   }
 }
