@@ -14,7 +14,6 @@ class SummaryPage extends StatefulWidget {
 class _SummaryPageState extends State<SummaryPage> {
   final dbHelper = DatabaseHelper();
   List<DateTime> _allAbsences = [];
-  int _totalCount = 0;
 
   @override
   void initState() {
@@ -24,10 +23,8 @@ class _SummaryPageState extends State<SummaryPage> {
 
   Future<void> _loadAllData() async {
     final absences = await dbHelper.getAbsences();
-    final count = await dbHelper.getAbsenceCount();
     setState(() {
       _allAbsences = absences;
-      _totalCount = count;
     });
   }
 
@@ -93,6 +90,7 @@ class _SummaryPageState extends State<SummaryPage> {
     final now = DateTime.now();
     final currentMonthKey = '\${_getMonthName(now.month)} \${now.year}';
     final currentMonthCount = groupedAbsences[currentMonthKey]?.length ?? 0;
+    final totalCount = _allAbsences.length;
 
     return Scaffold(
       appBar: AppBar(
@@ -114,7 +112,7 @@ class _SummaryPageState extends State<SummaryPage> {
                       child: Column(
                         children: [
                           Text(
-                            '\$_totalCount',
+                            '\$totalCount',
                             style: TextStyle(
                               fontSize: 32,
                               fontWeight: FontWeight.bold,

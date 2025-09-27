@@ -102,12 +102,12 @@ class _AbsenceHomePageState extends State<AbsenceHomePage> {
   }
 
   void _sendQuickEmail(DateTime date) async {
-    final String dateStr = DateFormat('dd.MM.yyyy').format(date);
+    final String formattedDate = DateFormat('dd.MM.yyyy').format(date);
     final String dayName = _getDayName(date.weekday);
 
     final String subject = Uri.encodeComponent('Nieobecność - obiady');
     final String body = Uri.encodeComponent(
-      'Dzień dobry,\n\nInformuję, że \$childName nie będzie obecny w szkole w dniu \$dateStr (\$dayName).\n\nPozdrawiam'
+      'Dzień dobry,\n\nInformuję, że \$childName nie będzie obecny w szkole w dniu \$formattedDate (\$dayName).\n\nPozdrawiam'
     );
 
     final Uri emailUri = Uri.parse('mailto:\$schoolEmail?subject=\$subject&body=\$body');
@@ -342,12 +342,12 @@ class _CalendarPageState extends State<CalendarPage> {
   }
 
   void _sendEmail(DateTime date) async {
-    final String dateStr = DateFormat('dd.MM.yyyy').format(date);
+    final String formattedDate = DateFormat('dd.MM.yyyy').format(date);
     final String dayName = _getDayName(date.weekday);
 
     final String subject = Uri.encodeComponent('Nieobecność - obiady');
     final String body = Uri.encodeComponent(
-      'Dzień dobry,\n\nInformuję, że \$childName nie będzie obecny w szkole w dniu \$dateStr (\$dayName).\n\nPozdrawiam'
+      'Dzień dobry,\n\nInformuję, że \$childName nie będzie obecny w szkole w dniu \$formattedDate (\$dayName).\n\nPozdrawiam'
     );
 
     final Uri emailUri = Uri.parse('mailto:\$schoolEmail?subject=\$subject&body=\$body');
